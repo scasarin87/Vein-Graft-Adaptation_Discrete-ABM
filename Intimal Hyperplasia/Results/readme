@@ -1,0 +1,8 @@
+postprocessing: plots for 1)SMCintima, 2)Intimal area, 3)Lumen area, and 4)Wall area
+                all of them with the 15 runs + mean trend
+
+postprocessing2 --> 3 panels figure with lumen area/intimal area/medial area
+                
+intima_thickness: thickness of the intima in gray scale
+
+graph2: frontal and transverse view of the graft
