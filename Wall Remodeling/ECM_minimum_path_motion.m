@@ -1,0 +1,347 @@
+% ECM_minimum_path_motion
+clear chemin dist6 in_media
+
+% level of noise added to the distance function used to compute the shortest path
+bruit=0.1;
+
+% Again ... if change_matrix has been updated inside the cicle, we do not
+% need to add any check point. The code already gets access the function
+% ONLY if (j,k) has recorded some activities and it hasn'been modified in
+% the meanwhile!!!
+
+% Access the function only if you have recorded any kind of ECM activity
+if change_matrix(j,k)~=0,
+    
+    % Checkpoint: (j,k) cannot be part of lumen or external support
+    if lamina(j,k)<=0,
+        if lumen_hole(j,k)~=0,
+            display('bug in ECM_minimum_path line 18: piece of lumen recorded where not supposed to'); pause;
+        end
+    else
+        if external_support(j,k)~=0,
+            display('bug in SMC_minimum_path line 22: piece of ext support recorded where not supposed to'); pause;
+        end
+    end
+    
+    % Take care of those cells that have more than one empty spaces close
+    % to them. If we'll find out that there are actually empty spaces
+    % around (j,k) we won't need to apply any minimum path, becuase we will
+    % move the SMC that generated the matric right in one of the neighbors
+    % that will be chosen randomly
+    ECM_more_empties;
+    
+    
+    % IF there are no empty neighbors around (j,k), we will move the SMC
+    % according with the minimum path motion law
+    if cell_at_wall==0,
+        
+        % IF (j,k) is in the intima, we move toward the lumen
+        distance_lumen=Nx+Ny;
+        if lamina(j,k)<=0, % inside the Elastic Lamina, i.e intima
+            for jk=1:Nlw,
+                da=sqrt((X(j,k)-Xlw(jk))^2+(Y(j,k)-Ylw(jk))^2);
+                if da<distance_lumen,
+                    
+                    % jk0 --> inddex of the closest lumen border point to the current site (j,k)
+                    % distance_lumen --> minimize distance between (j,k) and
+                    % the lumen border
+                    jk0=jk; distance_lumen=da;
+                end
+                clear da;
+            end
+            
+            % da --> matrix that defines for each point of the lumen, the
+            % entity of the distance between jk0 and the point in the lumen
+            % itslef
+            for j1=1:Nx,
+                for k1=1:Ny,
+                    if lumen_hole(j1,k1)==1,
+                        da(j1,k1)=sqrt((Xlw(jk0)-X(j1,k1))^2+(Ylw(jk0)-Y(j1,k1))^2);
+                    else
+                        da(j1,k1)=Nx*Ny;
+                    end
+                end
+            end
+            
+            % Our arrival point for the algorithm is the closest to jk0 but
+            % inside the lumen
+            distance_lumen=min(min(da));
+            for j1=1:Nx,
+                for k1=1:Ny,
+                    if da(j1,k1)==distance_lumen,
+                        
+                        % (j30,k30) --> end of the path coordinates
+                        j30=j1;
+                        k30=k1;
+                        
+                        % distance_lumen --> distance between (j,k) and
+                        % (j30,k30) that is the end of the path
+                        distance_lumen=da(j30,k30);
+                    end
+                end
+            end
+            clear da;
+            
+            vide=lumen_hole; % cell is inside intima
+        end
+        
+        
+        % IF (j,k) is in the media, we move toward the external support
+        if lamina(j,k)>0,
+            
+            % minimize the distance between (j,k) and external support
+            distance_external=Nx+Ny;
+            for jk=1:Nes,
+                da=sqrt((X(j,k)-Xes(jk))^2+(Y(j,k)-Yes(jk))^2);
+                if da<distance_external,
+                    
+                    % jk0 --> index of the closest external point to (j,k)
+                    % distance_external --> minimized distance
+                    jk0=jk; distance_external=da;
+                end
+                clear da;
+            end
+            
+            % da --> matrix describing all the distances of external
+            % support to jk0
+            for j1=1:Nx,
+                for k1=1:Ny,
+                    if external_support(j1,k1)==1,
+                        da(j1,k1)=sqrt((Xes(jk0)-X(j1,k1))^2+(Yes(jk0)-Y(j1,k1))^2);
+                    else
+                        da(j1,k1)=Nx*Ny;
+                    end
+                end
+            end
+            
+            % we look for the minimum value of da ~ minimized distance
+            distance_external=min(min(da));
+            for j1=1:Nx,
+                for k1=1:Ny,
+                    if da(j1,k1)==distance_external,
+                        
+                        % (j30,k30) --> coordinates of the end of the path
+                        j30=j1;
+                        k30=k1;
+                        
+                        % minimized final distance
+                        distance_external=da(j30,k30);
+                    end
+                end
+            end
+            clear da
+            
+            vide=external_support; % cell is inside media
+        end
+        
+        
+        % Status : out of the 2 cycles, (j30,k30) are the coordinates of
+        % the end of the path that can be either inside the lumen or in the
+        % external support. (j30,k30) MUST of course be empty. If it is
+        % not, display a bug
+        if type_cell(j30,k30)~=0 || lumen_hole(j30,k30)+external_support(j30,k30)==0,
+            display('BUG in ECM_minimum_path_motion line 134: you are trying to place a cell in an OCCUPIED SITE!');
+        end
+        
+        % After the check point we have the starting point (j,k) and the
+        % arrival point (j30,k30) of the minimum path motion algorithm.
+        % (j30,k30) is either in the lumen or in the external support.
+        
+        j2=j; k2=k;
+        step_chemin=0; % Initialize the steps counter
+        
+        % The following cycle determines how long we will need to travel
+        % along the grid in order to find an empty space where to place the
+        % daughter cell of site (j,k)
+        while vide(j2,k2)==0,
+            step_chemin=step_chemin+1; % update steps counter
+            if mod(k2,2)==0,
+                j_k=2;
+            else
+                j_k=1;
+            end
+            
+            % explore all the possible directions for the algorithm
+            for n=1:6,
+                j3=j2+directionx(n,j_k);
+                k3=k2+directiony(n);
+                
+                % dist6 is a vector virtually containing all the neighbors
+                % of current site (j,k). In dist6 we will place the
+                % distance of each neighbor to the arrival point (j30,k30).
+                dist6(n)=sqrt((X(j3,k3)-X(j30,k30))^2+(Y(j3,k3)-Y(j30,k30))^2)+bruit*rand(1);
+            end
+            
+            % get the neighbor of (j,k) with minimum distance to (j30,k30)
+            [~,nI]=min(dist6); % nI is the index of the neighbor closest to (j30,k30)
+            
+            % (j3,k3) --> coordinates of the closest neighbor to (j30,k30)
+            j3=j2+directionx(nI,j_k);
+            k3=k2+directiony(nI);
+            
+            % chemin is a <#steps,2> matrix. In each row the coordinates of
+            % the sites touched by the algorithm are recorded. It keeps
+            % track of the path that the algorithm will follow to carry the
+            % cell in its spot. 
+            chemin(step_chemin,1) = j3;
+            chemin(step_chemin,2) = k3;
+            
+            % Update the current site position and restart to look for an
+            % empty space from there!
+            j2=j3; k2=k3;
+            
+            %             if step_chemin>Nx+Ny,
+            %                 display('bug'); pause
+            %             end
+        end
+        
+        % total lenght of the path for the current site
+        lenght_path = step_chemin;
+    end
+end
+
+%% IF (j,k) has deposited an ECM...
+if change_matrix(j,k)==1 && type_cell(j,k)==1,
+    if cell_at_wall==0, % just to be sure that we have to apply the minimum path motion algorithm
+        
+        % update tissue along the path after mitosis:
+        
+        % Starting from the end of the path, make room for the new cell
+        % that will be placed one of the neighbor of (j,k) (that was
+        % already occupied)! Copy in n cell what is in (n-1)
+        for kpath=1:lenght_path-1, 
+            newstep=lenght_path-kpath+1;
+            
+            j1=chemin(newstep,1); 
+            k1=chemin(newstep,2);
+            
+            j2=chemin(newstep-1,1); 
+            k2=chemin(newstep-1,2);
+            
+            % update the state matrices
+            type_cell(j1,k1)=type_cell(j2,k2); % copy the SMC/ECM contained
+            internal_clock(j1,k1)=internal_clock(j2,k2); % copy the clock
+            change_matrix(j1,k1)=change_matrix(j2,k2); % copy the change status
+            
+            % Checkpoint not to leave empty sistes
+            if lamina(j1,k1)<=0 && type_cell(j1,k1)==0, % in intima
+                display('bug in ECM_minimum_path line 230: HOLE IN THE GRAFT!');
+                pause;
+            end
+            if lamina(j1,k1)>0 && type_cell(j1,k1)==0, % in media
+                display('bug in ECM_minimum_path line 234: HOLE IN TEH GRAFT!');
+                pause;
+            end
+            
+        end
+        
+        % SMC in (j,k) places an ECM in (jA,kA)
+        j1=chemin(1,1); 
+        k1=chemin(1,2);
+        
+        type_cell(j1,k1)=2; % place the ECM
+        internal_clock(j1,k1)=0; % reset the internal clock
+        change_matrix(j1,k1)=0; % reset the change_matrix tracker
+        % checkpoint: current (j1,k1) MUST not be empty
+        if lamina(j1,k1)<=0 && type_cell(j1,k1)==0, % in intima
+            display('bug in ECM_minimum_path line 250: HOLE IN THE GRAFT!');
+            pause;
+        end
+        if lamina(j1,k1)>0 && type_cell(j1,k1)==0, % in media
+            display('bug in ECM_minimum_path line 254: HOLE IN THE GRAFT!');
+            pause;
+        end
+        
+        % As done before, SMC stays in (j,k). Just do update the
+        % change_matrix tracker
+        change_matrix(j,k)=0; % reset the change cell status
+        internal_clock(j,k)=0; % reset the internal clock
+
+        % Checkpoint : last site of the path has been invaded from graft. Update lumen and ext support accordingly
+        % (j1,k1) --> coordinates of the last site of the path 
+        j1=chemin(lenght_path,1); 
+        k1=chemin(lenght_path,2);
+        
+        if lamina(j1,k1)<=0, % inside intima ... 
+            lumen_hole(j1,k1) = 0;
+        end
+        if lamina(j1,k1)>0, % inside media
+            external_support(j1,k1) = 0; 
+        end
+    end
+end
+
+%% IF an ECM has been degradated in (j,k)...
+if change_matrix(j,k)==-1 && type_cell(j,k)==2,
+    % update tissue along the path after apoptosis:
+    if cell_at_wall==0,
+        
+        % (j1,k1) --> coordinates of the very first step of the chemin
+        j1=chemin(1,1); 
+        k1=chemin(1,2);
+        
+        % shift contain of (j1,k1) in (j,k) that has been freed from ECM
+        % previously contained in there
+        type_cell(j,k)=type_cell(j1,k1); 
+        internal_clock(j,k)=0;
+        change_matrix(j,k)=0;
+        % checkpoint not to leave holes in the graft
+        if lamina(j,k)<=0 && type_cell(j,k)==0,
+            display('bug in ECM_minimum_path line 302: HOLE IN THE GRAFT!');
+            pause;
+        end
+        if lamina(j,k)>0 && type_cell(j,k)==0, % in media
+            display('bug in ECM_minimum_path line 306: HOLE IN THE GRAFT!');
+            pause;
+        end
+
+        % Update the rest of the path
+        for kpath=1:lenght_path-2,
+            
+            % In each n-th cell, copy the contain of (n+1)th cell
+            
+            % n-th cell coordinates
+            j1=chemin(kpath,1); 
+            k1=chemin(kpath,2);
+            
+            % (n+1)th cell coordinates
+            j2=chemin(kpath+1,1); 
+            k2=chemin(kpath+1,2);
+            
+            % copy the contain regardless it is SMC or ECM
+            type_cell(j1,k1)=type_cell(j2,k2); 
+            internal_clock(j1,k1)=internal_clock(j2,k2);
+            change_matrix(j1,k1)=change_matrix(j2,k2);
+            % checkpoint not to leave holes in the graft
+            if lamina(j1,k1)<=0 && type_cell(j1,k1)==0,
+                display('bug in ECM_minimum_path line 329: HOLE IN THE GRAFT!');
+                pause;
+            end
+            if lamina(j1,k1)>0 && type_cell(j1,k1)==0, % in media
+                display('bug in ECM_minimum_path line 333: HOLE IN TEH GRAFT!');
+                pause;
+            end    
+        end
+        
+        % (j1,k1) --> coordinates of the second last site of the path that
+        % will turn being or lumen_hole or external support
+        j1=chemin(lenght_path-1,1); 
+        k1=chemin(lenght_path-1,2);
+        
+        % update state matrices
+        type_cell(j1,k1)=0; % empty the site
+        internal_clock(j1,k1)=0; % reset the clock
+        change_matrix(j1,k1)=0; % reset change_matrix
+        % Checkpoint : the secondlast site of the path is now SURELY empty, so
+        % update lumen_hole and external_support matrices accordingly
+        if lamina(j1,k1)<=0, % in intima ...
+            lumen_hole(j1,k1) = 1; % lumen has invaded the graft
+        end
+        if lamina(j1,k1)>0, % in media ...
+            external_support(j1,k1) = 1; % ext support has invaded the graft
+        end
+        
+    end
+end % end of function
+
+clear vide chemin
