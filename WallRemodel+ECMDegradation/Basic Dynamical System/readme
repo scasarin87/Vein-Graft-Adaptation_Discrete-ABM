@@ -1,0 +1,26 @@
+Un set up interessante per simulare qualitativamente un qualche tipo di competizione tra eventi cellulari:
+
+Obiettivo: studiare la medial thickness. ci aspettiamo un trend NON monotóno. Voglio far agire la degradazione 
+           di ECM nella media in primis e contemporaneamente voglio che la mitosi di SMC nella media saturi 
+           l'effetto della degradazione fino a pareggiarlo e a superarlo diventando cosi predominante.
+
+Output: cio che mi aspetto é un trend in discesa per la medial thickness all'inizio con una inversione di 
+        tendenza che la porti a crescere raggiungendo un asintoto
+
+SetUp: un soluzione non ottimale, ma se non altro ragionevole si ottiene con il seguente setup dei parametri
+       - a(3) = -0.1        ECM degradation
+       - a(4) = 0.05        SMC mitosis
+       - sigma_objective=20 target wall tension
+
+Si puòpensare di mantenerlo come trend qualitativo o si puo provare a calibrare Il dynamical system sull'output
+dell'ABM che sta mostrando un trend simile in effetti.
+
+
+Un setUp piu vicino all'output dell'ABM é il seguente...
+       - a(3) = -0.07        ECM degradation
+       - a(4) = 0.05        SMC mitosis
+       - sigma_objective=50 target wall tension
+
+MAIN_REVIEWER.m cambia solamente il time scale cosi il secondo reviewer 
+non ci scassa piu' la minchia
+        
